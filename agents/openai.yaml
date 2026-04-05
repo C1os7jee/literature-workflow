@@ -1,0 +1,4 @@
+interface:
+  display_name: "Literature Workflow"
+  short_description: "Verify papers with CNKI, Scholar, and Zotero"
+  default_prompt: "Use $literature-workflow to verify Chinese and English papers with the bundled CNKI workflows, Google Scholar workflows, and Zotero MCP tools; import only missing verified items into Zotero and report corrections or unresolved citations."

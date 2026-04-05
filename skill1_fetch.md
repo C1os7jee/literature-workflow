@@ -1,130 +1,131 @@
-# SKILL 1 · 文献抓取
+# SKILL 1 - Search, Verification, And Citation Resolution
 
-## 职责
-从 Google Scholar 和 CNKI 检索文献，返回结构化元数据列表。本模块只负责"找"，不负责入库。
+## Responsibility
 
----
+Turn a topic, DOI, title list, or noisy reference list into verified paper metadata. This module is responsible for source selection, title lookup, author matching, confidence labeling, and correction detection before any Zotero write happens.
 
-## 模式 A · 主题搜索
+## Source Routing
 
-### 输入
-```
-topic: string          # 研究主题，如"数字金融与收入不平等"
-min_total: int         # 最少文献总数，默认 40
-min_recent: int        # 近十年最少数量，默认 25
-language: "zh"|"en"|"both"  # 检索语言，默认 both
-```
+| Request pattern | Primary bundle | Supporting evidence |
+|---|---|---|
+| Chinese journal article | CNKI search and detail pages | Journal search or index, DOI page, publisher page |
+| Chinese core-journal verification | CNKI journal search and journal index | Official journal site |
+| Chinese thesis or dissertation | CNKI first | Official thesis repository or university record |
+| English journal or conference paper | Google Scholar | DOI resolution, publisher page, Crossref |
+| Citation expansion, “cited by”, influence tracing | Google Scholar cited-by | Publisher page, Crossref |
+| Mixed list with Chinese and English items | Route each item independently | Merge evidence at the end |
 
-### 检索策略
+## Load These Bundled Docs Only When Needed
 
-**第一轮：Google Scholar**
-1. 构造主查询：`{topic}` 按引用数排序，时间不限，抓取前20条
-2. 构造近十年查询：`{topic} after:{currentYear-10}` 抓取前20条
-3. 扩展查询：提取主题的上位词/同义词，再检索一轮补充
+- Chinese retrieval:
+  [cnki-search](cnki-skills/skills/cnki-search/SKILL.md),
+  [cnki-advanced-search](cnki-skills/skills/cnki-advanced-search/SKILL.md),
+  [cnki-paper-detail](cnki-skills/skills/cnki-paper-detail/SKILL.md),
+  [cnki-journal-search](cnki-skills/skills/cnki-journal-search/SKILL.md),
+  [cnki-journal-index](cnki-skills/skills/cnki-journal-index/SKILL.md)
+- English retrieval:
+  [gs-search](gs-skills/skills/gs-search/SKILL.md),
+  [gs-advanced-search](gs-skills/skills/gs-advanced-search/SKILL.md),
+  [gs-cited-by](gs-skills/skills/gs-cited-by/SKILL.md),
+  [gs-fulltext](gs-skills/skills/gs-fulltext/SKILL.md)
 
-**第二轮：CNKI 补充（当 language=zh 或 both）**
-1. 在 CNKI 检索同主题中文文献
-2. 优先来源：CSSCI、CSCD、北大核心
-3. 补充10-15篇，避免与 GS 结果重复
+## Mode A: Topic-Based Collection
 
-**数量不足时的处理**
-- 若结果 < min_total：自动放宽时间限制、拆解关键词重新检索
-- 最多尝试3轮扩展，仍不足则返回已有结果并告知用户
+1. Normalize the topic into 2-6 search expressions.
+2. Decide the source mix:
+   Chinese-heavy topic -> CNKI first;
+   English-heavy topic -> Google Scholar first;
+   mixed topic -> parallel source coverage.
+3. Run source-native search:
+   CNKI via `cnki-search` or `cnki-advanced-search`;
+   Google Scholar via `gs-search` or `gs-advanced-search`.
+4. For shortlisted papers, open detail-level evidence:
+   CNKI via `cnki-paper-detail`;
+   English papers via DOI or publisher metadata, plus `gs-fulltext` when full text matters.
+5. Expand only when needed:
+   use `gs-cited-by` for high-value seed papers;
+   use CNKI journal tools when the user explicitly asks about core status or indexing.
+6. Produce a verified candidate list with confidence labels before sending anything to Zotero.
 
-### 排序规则
-1. 引用数 > 100 的文献排最前
-2. 同等引用数下，年份越新越靠前
-3. 近十年文献与早期文献交替排列，保证覆盖度
+## Mode B: Citation List Resolution
 
-### 输出格式（JSON）
+### Parse Each Raw Citation Into Target Fields
+
+Extract, when present:
+- `doi`
+- `title`
+- `authors`
+- `year`
+- `venue`
+- `volume_issue_pages`
+- `type`
+
+Do not trust the raw citation as a whole string. It may contain title errors, journal errors, or author omissions.
+
+### Search Order
+
+1. If DOI exists:
+   verify DOI metadata first, then use source-specific search only to fill gaps or confirm language variants.
+2. If no DOI and the item is Chinese:
+   search by exact title in CNKI first, then confirm with author match, then use journal-search or journal-index if venue verification is needed.
+3. If no DOI and the item is English:
+   search by title in Google Scholar first, then confirm with author match, then resolve DOI or publisher landing page.
+4. Use the full raw reference string only as a last fallback after title-based search fails.
+
+### Matching Rules
+
+- Exact or near-exact title plus matching first author and no venue conflict:
+  `confirmed`
+- Official source record exists but differs from the user-supplied citation while authors and topic clearly match:
+  `corrected_candidate`
+- Title is similar but author match is weak, absent, or conflicting:
+  `possible_duplicate`
+- No reliable official or DOI-backed record found:
+  `not_found`
+
+### Correction Policy
+
+A corrected candidate may be auto-promoted to importable only when the evidence is strong:
+- DOI-backed canonical metadata, or
+- official CNKI or publisher record with strong author match and no major conflict
+
+When auto-promoting a corrected candidate, always report the correction in plain language.
+
+## CAPTCHA Handling
+
+- CNKI and Google Scholar browser flows assume Chrome DevTools MCP is available.
+- If either site shows CAPTCHA, stop and ask the user to solve it manually in the browser.
+- Resume from the same page after the user confirms.
+
+## Tool Availability Fallback
+
+If the current Codex session does not expose the browser MCP tools required by the bundled CNKI or Google Scholar docs:
+
+1. Keep the same source priority and verification rules.
+2. Use official web pages, DOI content negotiation, Crossref, or publisher pages as fallback evidence.
+3. Preserve the same confidence labels:
+   `confirmed`, `corrected_candidate`, `possible_duplicate`, `not_found`.
+
+## Output Schema
+
+Return each resolved item in a structure equivalent to:
+
 ```json
 {
-  "mode": "A",
-  "query_topic": "数字金融与收入不平等",
-  "search_timestamp": "2024-01-15T10:30:00",
-  "total_found": 43,
-  "recent_count": 27,
-  "results": [
-    {
-      "id": 1,
-      "title": "Digital Finance and Income Inequality",
-      "authors": ["Zhang Wei", "Li Ming"],
-      "year": 2023,
-      "journal": "Journal of Finance",
-      "doi": "10.1111/jofi.12345",
-      "citations": 312,
-      "abstract": "...",
-      "source": "gs",
-      "language": "en",
-      "url": "https://...",
-      "in_zotero": false
-    }
-  ]
+  "input_title": "",
+  "canonical_title": "",
+  "authors": [],
+  "year": "",
+  "venue": "",
+  "type": "",
+  "doi": "",
+  "url": "",
+  "source_used": "",
+  "status": "confirmed",
+  "confidence": 0.0,
+  "correction_note": "",
+  "evidence": []
 }
 ```
 
----
-
-## 模式 B · 精确查找
-
-### 输入
-```
-items: list   # 文献列表，每条可以是以下任意格式：
-              # - DOI: "10.1111/jofi.12345"
-              # - 标题: "Digital Finance and Income Inequality"
-              # - APA格式引用: "Zhang, W. (2023). Digital..."
-              # - 混合列表均可
-```
-
-### 处理逻辑
-1. 解析每条输入，识别格式类型
-2. DOI → 直接调用 CrossRef API 获取元数据
-3. 标题 → Google Scholar 精确搜索，取相似度最高的结果
-4. APA 引用 → 提取作者+年份+标题，再精确搜索
-5. 每条返回置信度评分（0-1），低于 0.8 时标记为"需人工确认"
-
-### 输出格式（JSON）
-```json
-{
-  "mode": "B",
-  "total_input": 15,
-  "resolved": 13,
-  "needs_review": 2,
-  "results": [
-    {
-      "id": 1,
-      "input_raw": "10.1111/jofi.12345",
-      "input_type": "doi",
-      "confidence": 1.0,
-      "title": "...",
-      "authors": [...],
-      "year": 2023,
-      "journal": "...",
-      "doi": "10.1111/jofi.12345",
-      "abstract": "...",
-      "url": "https://...",
-      "in_zotero": false,
-      "flag": null
-    },
-    {
-      "id": 2,
-      "input_raw": "某篇模糊标题",
-      "input_type": "title",
-      "confidence": 0.71,
-      "flag": "needs_review",
-      "candidates": [...]
-    }
-  ]
-}
-```
-
----
-
-## 错误处理
-
-| 情况 | 处理方式 |
-|------|----------|
-| GS 访问受限/超时 | 等待5秒重试，最多3次，仍失败则跳过并记录 |
-| DOI 在 CrossRef 查不到 | 降级到 GS 标题搜索 |
-| 文献无摘要 | abstract 字段填 "N/A"，不影响入库 |
-| 找不到任何匹配 | 标记 flag="not_found"，跳过入库 |
+Keep `evidence` short and source-backed. Do not include invented abstracts or guesses.

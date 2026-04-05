@@ -1,174 +1,94 @@
-# SKILL 3 · 批量任务调度器
+# SKILL 3 - Batch Dispatcher And Execution Policy
 
-## 职责
-解析用户指令，选择执行模式，串联 SKILL 1 → SKILL 2 → SKILL 4，输出最终结果。这是用户的主要交互入口。
+## Responsibility
 
----
+Parse the user request, choose mode A or mode B, load only the necessary bundled package docs, orchestrate the fetch and Zotero stages, and produce a clean final report.
 
-## 指令解析
+## Mode Selection
 
-### 识别模式 A（主题搜索 + 完整解读）
+### Mode A: Topic Search, Screening, And Optional Review
 
-触发条件：用户指令包含以下任意一种：
-- 给出研究主题/领域关键词
-- 要求"搜索/找/检索"文献
-- 要求生成解读/综述
+Use mode A when the user:
+- gives a research topic
+- asks for literature search or source screening
+- wants a literature review, reading notes, or structured summaries
 
-**标准指令模板**：
-```
-围绕【{研究主题}】，搜索至少{N}篇相关文献，
-其中至少{M}篇为近十年，优先高引用文献，
-补充我本地Zotero里没有的，全部导入到collection【{collection名称}】，
-并对每篇生成结构化解读。
-```
+### Mode B: Citation Resolution And Zotero Import
 
-**提取参数**：
-```
-topic:           从指令中提取研究主题
-min_total:       默认 40，用户指定则使用用户值
-min_recent:      默认 25，用户指定则使用用户值
-collection_name: 用户指定，未指定则自动命名为"{topic}_{YYYYMM}"
-need_review:     true（模式A默认生成解读）
-language:        根据主题自动判断 zh/en/both
-```
+Use mode B when the user:
+- gives a DOI list, title list, or formatted reference list
+- asks to “导入 Zotero”, “补齐未入库文献”, or “精确查找这些文献”
+- mainly wants metadata correction, duplicate handling, and import
 
----
+## Default Parameters
 
-### 识别模式 B（精确列表 → 仅入库）
+- `collection_name`:
+  use the user’s target collection if provided; otherwise default to the currently selected Zotero collection or library root
+- `need_review`:
+  mode A = `true`
+  mode B = `false`
+- `language_mix`:
+  infer from the user’s titles, journals, and query language
 
-触发条件：用户提供了具体文献列表（DOI、标题、引用格式）且明确表示"不需要解读"或"只入库"
+## Package Loading Order
 
-**标准指令模板**：
-```
-把以下文献入库到我的Zotero，归入collection【{collection名称}】，不需要解读：
-{文献列表}
-```
+1. Read [skill1_fetch.md](skill1_fetch.md).
+2. Load CNKI docs only if Chinese-source work is needed.
+3. Load Google Scholar docs only if English or international work is needed.
+4. Read [skill2_zotero.md](skill2_zotero.md) before any write or duplicate operation.
+5. Read [skill4_review.md](skill4_review.md) only when the user wants notes, summaries, or review output.
 
-**提取参数**：
-```
-items:           解析用户提供的文献列表
-collection_name: 用户指定，未指定则使用"imported_{YYYYMMDD}"
-need_review:     false
-```
+## Mode A Pipeline
 
----
+1. Normalize the topic and define source mix.
+2. Search with the bundled source workflows:
+   CNKI for Chinese materials;
+   Google Scholar for international discovery.
+3. Verify shortlisted papers with title, author, and source evidence.
+4. Pass verified items to the Zotero stage.
+5. If review output is requested, generate structured notes for imported or selected items.
+6. Return a final report with imports, reuse, corrections, and unresolved items.
 
-## 模式 A 执行流水线
+## Mode B Pipeline
 
-```
-Step 1: 读取 skill1_fetch.md，执行模式A检索
-        → 输出候选文献列表（JSON）
+1. Parse the raw citation list into per-item fields.
+2. Resolve each item using the source routing from SKILL 1:
+   DOI first;
+   otherwise title search plus author confirmation.
+3. Separate results into:
+   `confirmed`, `corrected_candidate`, `possible_duplicate`, `not_found`
+4. Send only confirmed items and high-confidence corrected candidates into the Zotero stage.
+5. Reuse existing Zotero items where possible.
+6. Return a final report that distinguishes newly added items from corrected imports and unresolved citations.
 
-Step 2: 读取 skill2_zotero.md，执行去重
-        → 过滤掉 in_zotero=true 的条目
-        → 输出 new_items 列表
+## Tool Availability Policy
 
-Step 3: 数量验证
-        if len(new_items) < min_total * 0.8:
-            → 扩展检索词，重新执行 Step 1（最多2次）
-        if 仍然不足:
-            → 告知用户当前数量，询问是否继续
+The bundled CNKI and Google Scholar workflows assume Chrome DevTools MCP access, and the Zotero stage assumes Zotero MCP access.
 
-Step 4: 批量入库（调用 skill2_zotero.md Step 2）
-        → 分批处理，每批10篇
-        → 实时输出进度报告
+If the current session lacks one of these tool surfaces:
 
-Step 5: 对每篇新入库文献调用 skill4_review.md 生成解读
-        → 有PDF全文优先使用全文
-        → 无PDF则基于摘要+元数据生成
-        → 实时追加到输出文件
+- keep the same source priority and decision rules
+- use browsing, DOI metadata, publisher pages, local connector, or exporter scripts as fallback
+- say clearly which part ran in fallback mode
 
-Step 6: 生成汇总报告（见下方格式）
-```
+Do not silently change the verification standard just because the preferred tool is unavailable.
 
----
+## Progress Reporting
 
-## 模式 B 执行流水线
+- For batch jobs, report progress every 10 items.
+- Also report when the workflow switches sources or changes from verification to import.
+- Keep progress updates short and operational:
+  what source is being used, what has been confirmed, and what remains unresolved.
 
-```
-Step 1: 读取 skill1_fetch.md，执行模式B精确查找
-        → 补全每条文献的元数据
+## Final Report Format
 
-Step 2: 展示待确认列表（confidence < 0.8 的条目）
-        → 等待用户确认或修正
+Always separate the outcomes:
 
-Step 3: 读取 skill2_zotero.md，执行批量入库
-        → 不调用 SKILL 4，跳过解读步骤
+- newly imported
+- reused existing items
+- already in target collection
+- corrected canonical imports
+- possible duplicates awaiting confirmation
+- unresolved or not found
 
-Step 4: 输出入库汇总报告
-```
-
----
-
-## 进度报告格式
-
-### 实时进度（每10篇）
-```
-⏳ 正在处理... [批次 2/4]
-📥 入库: 20/40 篇 | ✅ 成功: 18 | ⏭️ 跳过: 2
-📝 解读: 18/18 篇已完成
-```
-
-### 最终汇总报告
-```
-╔══════════════════════════════════════╗
-║     文献工作流完成报告               ║
-╠══════════════════════════════════════╣
-║ 检索主题:  数字金融与收入不平等      ║
-║ 执行模式:  A（搜索 + 解读）          ║
-╠══════════════════════════════════════╣
-║ 📊 检索结果                          ║
-║   · 总检索到:    43 篇               ║
-║   · 近十年:      28 篇 (65%)         ║
-║   · 高引(>100):  12 篇               ║
-╠══════════════════════════════════════╣
-║ 📥 入库结果                          ║
-║   · 新增入库:    38 篇               ║
-║   · 已存在跳过:  5 篇                ║
-║   · PDF已下载:   31 篇               ║
-╠══════════════════════════════════════╣
-║ 📝 解读输出                          ║
-║   · 已生成解读:  38 篇               ║
-║   · 输出文件: 数字金融_解读_2024.md  ║
-╠══════════════════════════════════════╣
-║ 📁 Zotero Collection: "数字金融与不平等" ║
-╚══════════════════════════════════════╝
-```
-
----
-
-## 断点续传机制
-
-每批完成后，将以下信息写入 checkpoint：
-```json
-{
-  "task_id": "task_20240115_103000",
-  "topic": "数字金融与收入不平等",
-  "mode": "A",
-  "collection": "数字金融与不平等",
-  "total": 43,
-  "completed_ids": [1, 2, 3, ...],
-  "last_batch": 2,
-  "status": "in_progress"
-}
-```
-
-重新运行时检测到同主题未完成任务，询问用户：
-```
-⚠️ 发现未完成的任务（数字金融与收入不平等，已完成 20/43 篇）
-→ [从断点继续] [重新开始]
-```
-
----
-
-## 参数不完整时的处理
-
-若用户指令缺少关键参数，按以下默认值补全，无需打断询问：
-
-| 参数 | 默认值 |
-|------|--------|
-| min_total | 40 |
-| min_recent | 25 |
-| collection_name | "{topic}_{YYYYMM}" |
-| language | 自动判断（含中文关键词→both，纯英文→en） |
-| need_review | 模式A=true，模式B=false |
+When corrections occurred, show the canonical title used for import and state that it differs from the user-supplied citation.

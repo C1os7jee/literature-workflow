@@ -1,158 +1,71 @@
-# SKILL 4 · 结构化文献解读
+# SKILL 4 - Structured Reading Notes
 
-## 职责
-对单篇或批量文献生成按学术逻辑组织的结构化解读，用于快速筛选文献和构建认知框架。不是简单摘要，而是提炼研究问题、识别策略、核心结论和机制解释。
+## Responsibility
 
----
+Produce a concise, source-backed reading note for one paper or a small set of papers. Prefer Zotero MCP content access when the item is already in the library; otherwise fall back to the verified metadata gathered during SKILL 1.
 
-## 输入
+## Preferred Inputs
 
-```
-paper: {
-    title, authors, year, journal, doi,
-    citations, abstract,
-    full_text (可选，有PDF时使用),
-    query_topic (检索时的主题，用于判断相关性)
-}
-```
+- Zotero item key or item ID
+- DOI
+- canonical title
+- attached PDF or full-text item already present in Zotero
 
-**信息来源优先级**：
-1. PDF 全文（最佳）→ 可提炼方法细节、数据来源、稳健性检验
-2. 仅有摘要 → 基于摘要生成，标注"（基于摘要）"
-3. 仅有标题+元数据 → 生成极简版，标注"（信息不足，建议获取全文）"
+## Preferred Zotero MCP Tools
 
----
+- `zotero_get_item_metadata`
+- `zotero_get_item_fulltext`
+- `zotero_get_item_children`
+- `zotero_get_annotations`
+- `zotero_get_notes`
+- `zotero_create_note`
 
-## 解读框架
+If Scite support is configured and the user asks about influence or reliability, optionally use:
+- `scite_enrich_item`
 
-### 输出模板（Markdown）
+## Evidence Order
 
-```markdown
----
-## 📄 {title}
+1. Full text from Zotero
+2. Zotero annotations and notes
+3. Verified abstract and metadata
+4. Citation or source-page snippets
 
-| 字段 | 内容 |
-|------|------|
-| 作者 | {authors} |
-| 年份 | {year} |
-| 期刊 | {journal} |
-| 引用数 | {citations} |
-| DOI | [{doi}](https://doi.org/{doi}) |
-| 信息来源 | 全文 / 摘要 / 仅元数据 |
+Do not write claims that are unsupported by the strongest available evidence.
 
-### 1. 研究问题
-> 本文试图回答什么问题？核心研究缺口是什么？
+## Workflow
 
-{一段话，聚焦核心问题，50-100字。避免笼统，要说清楚是什么细分问题。}
+1. Fetch metadata first.
+2. If full text exists, read enough of it to extract the research question, method, data, results, and limitations.
+3. If annotations exist, use them as priority cues for what the user found important.
+4. If only abstract-level evidence exists, produce an abstract-level note and explicitly say that the note is limited by missing full text.
+5. If the user wants the note stored back in Zotero, create a note after drafting it.
 
-### 2. 识别策略 / 研究设计
-> 如何建立因果识别？使用何种方法？
+## Recommended Note Structure
 
-**方法类型**：{从以下选择或组合}
-- 随机实验（RCT）
-- 双重差分（DID）
-- 断点回归（RD / RDD）
-- 工具变量（IV / 2SLS）
-- 倾向得分匹配（PSM）
-- 合成控制（SCM）
-- 固定效应面板（FE）
-- 理论模型 / 结构估计
-- 元分析（Meta-analysis）
-- 描述性统计 / 相关分析
+Use sections like these when the evidence supports them:
 
-**数据来源**：{样本、数据库、时间范围}
+- Citation
+- Research question
+- Data or materials
+- Method or model
+- Key findings
+- Limitations
+- Relevance to the user’s topic
+- What to compare next
 
-**关键识别假设**：{核心识别假设是什么，是否合理}（50-80字）
+## Writing Rules
 
-### 3. 核心结论
-> 主要发现是什么？
+- Paraphrase instead of copying long passages.
+- Keep uncertain fields explicit:
+  `not stated in available text`,
+  `full text unavailable`,
+  `inferred from abstract only`
+- Do not invent datasets, metrics, sample sizes, or conclusions.
 
-- {结论1，包含方向和效应量（如可获取）}
-- {结论2}
-- {结论3（如有）}
+## Zotero Note Output
 
-### 4. 机制解释
-> 结论背后的作用机制是什么？作者是否进行了机制检验？
+If storing the note in Zotero:
 
-{50-100字。说明中介变量或渠道，以及检验方式。如无机制分析则注明。}
-
-### 5. 与检索主题的相关性
-> 与「{query_topic}」的关联度和可借鉴之处
-
-{30-60字，说明本文对你研究的具体用处：文献综述引用/方法借鉴/数据参考/对比讨论等}
-
-**综合评级**：{⭐ 至 ⭐⭐⭐⭐⭐}
-- ⭐⭐⭐⭐⭐ 核心文献，必读
-- ⭐⭐⭐⭐ 高度相关，重要参考
-- ⭐⭐⭐ 相关，有参考价值
-- ⭐⭐ 边缘相关，可选读
-- ⭐ 关联不大，暂时搁置
-
----
-```
-
----
-
-## 批量解读输出文件结构
-
-当 SKILL 3 批量调用时，所有解读合并到一个文件：
-
-```markdown
-# {研究主题} · 文献解读汇编
-**生成时间**: {datetime}
-**文献总数**: {N} 篇
-**检索主题**: {topic}
-
----
-
-## 目录（按评级排序）
-
-### ⭐⭐⭐⭐⭐ 核心文献（{n}篇）
-1. [标题](#anchor1) — 作者, 年份, 期刊
-2. ...
-
-### ⭐⭐⭐⭐ 重要参考（{n}篇）
-...
-
-### ⭐⭐⭐ 一般参考（{n}篇）
-...
-
----
-
-## 详细解读
-
-{按评级从高到低依次排列每篇的解读内容}
-
----
-
-## 参考文献列表（APA格式）
-
-{按字母顺序排列所有文献的完整引用}
-```
-
-**输出文件命名**：`{topic}_{YYYYMM}_文献解读.md`
-
----
-
-## 质量控制
-
-### 避免的问题
-- 不能把摘要直接复制粘贴当"核心结论"
-- 不能凭主观臆测填写"识别策略"（无法判断时写"文中未明确说明"）
-- 相关性评级要基于 query_topic 判断，不是文献本身的质量
-
-### 信息不足时的处理
-```
-若仅有摘要，以下字段可能无法精确填写：
-- 识别策略中的"关键识别假设" → 写"摘要未提及，建议获取全文确认"
-- 效应量 → 写"摘要未报告"
-- 机制检验细节 → 写"摘要中未描述机制检验"
-```
-
-### 特殊文献类型处理
-| 文献类型 | 调整说明 |
-|----------|----------|
-| 理论模型论文 | "识别策略"改为"建模思路"，说明模型结构 |
-| 综述/元分析 | "研究问题"强调综述范围，"结论"写主要发现模式 |
-| 工作论文 | 标注"Working Paper"，提示结论可能尚未经同行评审 |
-| 中文文献 | 全部字段用中文输出 |
+- mention whether it was based on full text, annotations, or abstract only
+- include DOI and canonical title when available
+- keep the note compact enough to remain readable inside Zotero

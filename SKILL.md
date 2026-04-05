@@ -1,36 +1,77 @@
 ---
 name: literature-workflow
-description: 自动化文献检索、Zotero入库和结构化解读的完整工作流。当用户提到"文献综述"、"搜索文献"、"入库Zotero"、"文献调研"、"找论文"、"文献抓取"、"批量导入文献"、"自动检索"时触发。支持两种模式：模式A（给定研究主题，自动搜索40+篇高引文献并生成结构化解读）和模式B（给定文献列表，直接抓取元数据并批量入库Zotero，无需解读）。即使用户只是提到想整理某个研究领域的文献，也应主动触发此工作流。
+description: 真实学术文献检索、题录纠错、Zotero 去重入库和结构化阅读工作流。Use when Codex needs to search or verify Chinese or English papers, resolve DOI/title/citation lists into canonical metadata, compare them against a Zotero library, import missing items, reuse existing entries, or draft literature-review notes. This skill orchestrates the bundled CNKI workflows, Google Scholar workflows, and Zotero MCP package in this folder.
 ---
 
-# Literature Workflow · 文献自动化工作流
+# Literature Workflow
 
-## 概述
+Use this skill as the top-level orchestrator for literature work. Prefer the bundled packages in this folder over ad-hoc browsing or hand-written import logic.
 
-本 Skill 实现从文献检索到 Zotero 入库再到结构化解读的全流程自动化，杜绝虚假文献，所有结果来自真实检索。
+## Start Here
 
-## 子模块
+Read [skill3_batch.md](skill3_batch.md) first. Let it choose mode A or mode B and decide which bundled package docs to load.
+For reusable user-facing prompt templates, see [references/trigger-prompts.md](references/trigger-prompts.md).
 
-- `skill1_fetch.md` — 文献抓取（Google Scholar + CNKI）
-- `skill2_zotero.md` — Zotero 去重 & 自动入库
-- `skill3_batch.md` — 批量任务调度器（串联所有子模块）
-- `skill4_review.md` — 结构化文献解读
+## Bundled Packages
 
-## 快速识别用户意图
+- [CNKI workflows](cnki-skills/README.md)
+  Use for Chinese papers, official Chinese journal pages, journal indexing checks, and CNKI export metadata.
+- [Google Scholar workflows](gs-skills/README.md)
+  Use for English or international discovery, citation expansion, BibTeX export, and open full-text links.
+- [Zotero MCP](zotero-mcp/README.md)
+  Use for library reads and writes, duplicate checks, collection management, notes, annotations, semantic search, and DOI or URL import.
 
-| 用户说 | 对应模式 |
-|--------|----------|
-| "围绕XX主题找文献" / "搜索XX领域论文" | 模式 A |
-| "帮我找这些文献入库" / "把这批论文导入Zotero" | 模式 B |
-| "对这篇文章做解读" | 单独调用 SKILL 4 |
+## Primary Routing
 
-## 执行入口
+- Chinese title, Chinese journal, core-journal verification, or Chinese thesis:
+  prefer CNKI first.
+- English title, DOI lookup, cited-by expansion, or broad international discovery:
+  prefer Google Scholar first, then DOI or publisher metadata.
+- Zotero library search, dedupe, collection operations, note creation, metadata updates:
+  prefer Zotero MCP first.
+- If Zotero MCP is unavailable in the current client but Zotero local connector works:
+  use connector or bundled export scripts as fallback and say that MCP was unavailable.
 
-**收到用户指令后，首先读取 `skill3_batch.md`**，由批量调度器决定调用哪些子模块。
+## Non-Negotiable Rules
 
-## 重要原则
+1. Never invent papers, DOIs, abstracts, citations, or PDF availability.
+2. In citation-list mode, do not default to the full raw reference string. Prefer DOI first; otherwise search by title and then confirm with author match.
+3. Treat year, journal, pages, issue, and publisher as supporting evidence rather than the primary key.
+4. If the canonical record differs from the user-supplied citation, mark it as a correction and report the difference clearly.
+5. Pause when CNKI or Google Scholar surfaces CAPTCHA and ask the user to solve it manually before continuing.
+6. Reuse existing Zotero items instead of creating duplicates.
+7. Keep the workflow moving if one source fails. Switch sources or downgrade to a verified metadata-only report.
+8. For theses or dissertations, do not guess the school, degree type, or city. Leave the item unresolved until an official thesis record is found.
 
-1. **零虚假文献**：所有文献必须来自真实检索结果，禁止凭记忆生成文献信息
-2. **去重优先**：入库前必须与本地 Zotero 库对比，避免重复
-3. **断点续传**：批量任务中途中断后可从断点继续，不重复处理已完成条目
-4. **进度透明**：每完成10篇输出一次进度报告
+## Modules
+
+- [skill3_batch.md](skill3_batch.md): dispatcher and execution policy
+- [skill1_fetch.md](skill1_fetch.md): search, verification, and citation-resolution flow
+- [skill2_zotero.md](skill2_zotero.md): dedupe, import, reuse, and fallback write logic
+- [skill4_review.md](skill4_review.md): structured reading notes and Zotero note output
+
+## Load On Demand
+
+- CNKI search stack:
+  [cnki-search](cnki-skills/skills/cnki-search/SKILL.md),
+  [cnki-advanced-search](cnki-skills/skills/cnki-advanced-search/SKILL.md),
+  [cnki-paper-detail](cnki-skills/skills/cnki-paper-detail/SKILL.md),
+  [cnki-journal-search](cnki-skills/skills/cnki-journal-search/SKILL.md),
+  [cnki-journal-index](cnki-skills/skills/cnki-journal-index/SKILL.md),
+  [cnki-export](cnki-skills/skills/cnki-export/SKILL.md)
+- Google Scholar stack:
+  [gs-search](gs-skills/skills/gs-search/SKILL.md),
+  [gs-advanced-search](gs-skills/skills/gs-advanced-search/SKILL.md),
+  [gs-cited-by](gs-skills/skills/gs-cited-by/SKILL.md),
+  [gs-fulltext](gs-skills/skills/gs-fulltext/SKILL.md),
+  [gs-export](gs-skills/skills/gs-export/SKILL.md)
+- Zotero MCP references:
+  [README](zotero-mcp/README.md),
+  [getting started](zotero-mcp/docs/getting-started.md)
+
+## Default Behavior
+
+- Topic search, literature review, and source screening default to mode A.
+- DOI lists, title lists, reference lists, and “导入 Zotero” requests default to mode B.
+- Prefer Chinese output when the user works in Chinese, but keep titles and DOIs in their canonical language.
+- Report three buckets whenever relevant: confirmed import, corrected candidate, unresolved item.
