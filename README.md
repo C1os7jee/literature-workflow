@@ -1,6 +1,6 @@
 # literature-workflow
 
-`literature-workflow` 是一个面向 Codex 的文献工作流技能集合，用来把“检索文献、核对题录、导入 Zotero、去重复用、生成阅读笔记”串成一条更稳定的流程。
+`literature-workflow` 是一个文献工作流技能集合，用来把“检索文献、核对题录、导入 Zotero、去重复用、生成阅读笔记”串成一条更稳定的流程。
 
 这个项目的定位不是单一检索脚本，而是一个顶层编排技能：
 
